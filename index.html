@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mon Portfolio Data</title>
+    
+    <!-- 1. Styles -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fade-in { animation: fadeIn 0.5s ease-out forwards; }
+        #error-console { display: none; background: #fee2e2; color: #991b1b; padding: 20px; border: 2px solid #ef4444; margin: 20px; border-radius: 8px; font-family: monospace; }
+        .custom-scroll::-webkit-scrollbar { width: 4px; }
+        .custom-scroll::-webkit-scrollbar-track { background: #1e293b; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #0f766e; border-radius: 4px; }
+    </style>
+
+    <!-- 2. React & Babel -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- 3. Firebase (Avec Storage pour les fichiers) -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-storage-compat.js"></script>
+</head>
+<body class="bg-slate-900 text-slate-200">
+
+    <div id="error-console"></div>
+    <div id="root"></div>
+
+    <script>
+        window.onerror = function(message, source, lineno, colno, error) {
+            const errorBox = document.getElementById('error-console');
+            errorBox.style.display = 'block';
+            errorBox.innerHTML = `<strong>Oups ! Une erreur est survenue :</strong><br>${message}<br><small>Ligne: ${lineno}</small>`;
+            console.error(error);
+        };
+    </script>
+
+    <script type="text/babel">
+        
+        // ==========================================
+        // ⚠️ COLLE TA CONFIG FIREBASE ICI ⚠️
+        // ==========================================
+        const firebaseConfig = {
+            apiKey: "AIzaSyANMQfdMyhkbfMCjrJXR4c8zLCfuhHo8sc",
+            authDomain: "portfolio-c286b.firebaseapp.com",
+            projectId: "portfolio-c286b",
+            storageBucket: "portfolio-c286b.firebasestorage.app",
+            messagingSenderId: "960276980758",
+            appId: "1:960276980758:web:89ead44211ab21e1fac137",
+            measurementId: "G-8RXHMR52N7"
+        };
+
+        // --- Initialisation Firebase ---
+        let app, auth, db, storage;
+        try {
+            if (firebaseConfig.apiKey === "REMPLACE_CETTE_ZONE_PAR_TA_CLE") {
+                throw new Error("Configuration Firebase manquante !");
+            }
+            app = firebase.initializeApp(firebaseConfig);
+            auth = firebase.auth();
+            db = firebase.firestore();
+            storage = firebase.storage(); // Initialisation du stockage
+        } catch (e) {
+            console.warn(e);
+            if(e.message.includes("manquante")) {
+                 document.getElementById('error-console').style.display = 'block';
+                 document.getElementById('error-console').innerHTML = e.message;
+            }
+        }
+
+        const { useState, useEffect } = React;
+        
+        // --- ICÔNES ---
+        const IconSVG = ({ children, size = 24, className, onClick }) => (
+            <svg onClick={onClick} xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+                {children}
+            </svg>
+        );
+        const Icons = {
+            User: (p) => <IconSVG {...p}><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></IconSVG>,
+            Code: (p) => <IconSVG {...p}><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></IconSVG>,
+            Briefcase: (p) => <IconSVG {...p}><rect width="20" height="14" x="2" y="7" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></IconSVG>,
+            Plus: (p) => <IconSVG {...p}><path d="M5 12h14"/><path d="M12 5v14"/></IconSVG>,
+            Trash2: (p) => <IconSVG {...p}><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></IconSVG>,
+            Lock: (p) => <IconSVG {...p}><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></IconSVG>,
+            Unlock: (p) => <IconSVG {...p}><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></IconSVG>,
+            X: (p) => <IconSVG {...p}><path d="M18 6 6 18"/><path d="m6 6 18 12"/></IconSVG>,
+            Database: (p) => <IconSVG {...p}><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></IconSVG>,
+            ChevronUp: (p) => <IconSVG {...p}><polyline points="18 15 12 9 6 15"/></IconSVG>,
+            ChevronDown: (p) => <IconSVG {...p}><polyline points="6 9 12 15 18 9"/></IconSVG>,
+            ExternalLink: (p) => <IconSVG {...p}><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" x2="21" y1="14" y2="3"/></IconSVG>,
+            FileText: (p) => <IconSVG {...p}><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></IconSVG>
+        };
+        const Icon = ({ name, size = 24, className, onClick }) => {
+            const Cmp = Icons[name];
+            return Cmp ? <Cmp size={size} className={className} onClick={onClick} /> : <span>?</span>;
+        };
+
+        function App() {
+            // === CONFIGURATION ADMIN ===
+            const ADMIN_EMAIL = "admin@portfolio.com";
+            
+            // États
+            const [activeTab, setActiveTab] = useState('about');
+            const [isAdmin, setIsAdmin] = useState(false);
+            const [showLogin, setShowLogin] = useState(false);
+            const [passwordInput, setPasswordInput] = useState('');
+            const [isLoggingIn, setIsLoggingIn] = useState(false);
+            const [user, setUser] = useState(null);
+            
+            // Données
+            const [categories, setCategories] = useState([]);
+            const [skills, setSkills] = useState([]);
+            const [projects, setProjects] = useState([]);
+
+            // Formulaires
+            const [newCategory, setNewCategory] = useState('');
+            const [newSkill, setNewSkill] = useState({ name: '', level: 'Intermédiaire', categoryId: '', libraries: '' });
+            const [newProject, setNewProject] = useState({ title: '', description: '', tech: '', link: '' });
+            const [pdfFile, setPdfFile] = useState(null); // État pour stocker le fichier sélectionné
+            const [isUploading, setIsUploading] = useState(false);
+
+            // --- AUTH ---
+            useEffect(() => {
+                if(!auth) return;
+                const unsubscribe = auth.onAuthStateChanged((u) => {
+                    if (u) {
+                        setUser(u);
+                        setIsAdmin(u.email === ADMIN_EMAIL);
+                    } else {
+                        auth.signInAnonymously().catch(console.error);
+                        setIsAdmin(false); setUser(null);
+                    }
+                });
+                return () => unsubscribe();
+            }, []);
+
+            // --- CHARGEMENT ---
+            useEffect(() => {
+                if (!db) return;
+                const unsubCats = db.collection('categories').orderBy('order', 'asc').onSnapshot(s => {
+                    const cats = s.docs.map(d => ({id: d.id, ...d.data()}));
+                    setCategories(cats);
+                    if(cats.length > 0 && !newSkill.categoryId) setNewSkill(prev => ({...prev, categoryId: cats[0].id}));
+                });
+                const unsubSkills = db.collection('skills').orderBy('order', 'asc').onSnapshot(s => setSkills(s.docs.map(d => ({id: d.id, ...d.data()}))));
+                const unsubProjects = db.collection('projects').orderBy('createdAt', 'desc').onSnapshot(s => setProjects(s.docs.map(d => ({id: d.id, ...d.data()}))));
+                return () => { unsubCats(); unsubSkills(); unsubProjects(); };
+            }, []);
+
+            // --- ACTIONS ---
+            const handleLogin = async (e) => {
+                e.preventDefault(); setIsLoggingIn(true);
+                try { await auth.signInWithEmailAndPassword(ADMIN_EMAIL, passwordInput); setShowLogin(false); setPasswordInput(''); } 
+                catch (error) { alert("Erreur : " + error.code); }
+                setIsLoggingIn(false);
+            };
+            const handleLogout = async () => { if(confirm("Se déconnecter ?")) await auth.signOut(); };
+
+            // Catégories
+            const handleAddCategory = async (e) => {
+                e.preventDefault(); if(!newCategory.trim()) return;
+                const order = categories.length > 0 ? Math.max(...categories.map(c => c.order || 0)) + 1 : 0;
+                await db.collection('categories').add({ name: newCategory, order });
+                setNewCategory('');
+            };
+            const handleDeleteCategory = async (id) => { if(confirm("Supprimer cette catégorie ?")) await db.collection('categories').doc(id).delete(); };
+            const moveCategory = async (index, direction) => {
+                if ((direction === -1 && index === 0) || (direction === 1 && index === categories.length - 1)) return;
+                const c1 = categories[index]; const c2 = categories[index + direction];
+                await db.collection('categories').doc(c1.id).update({ order: c2.order });
+                await db.collection('categories').doc(c2.id).update({ order: c1.order });
+            };
+
+            // Compétences
+            const handleAddSkill = async (e) => {
+                e.preventDefault(); if (!db || !newSkill.name) return;
+                const libsArray = newSkill.libraries.split(',').map(l => l.trim()).filter(l => l);
+                let catId = newSkill.categoryId; if(!catId && categories.length > 0) catId = categories[0].id;
+                await db.collection('skills').add({ 
+                    name: newSkill.name, level: newSkill.level, categoryId: catId, libraries: libsArray, order: Date.now() 
+                });
+                setNewSkill({ ...newSkill, name: '', libraries: '' });
+            };
+            const handleDeleteSkill = async (id) => { if(confirm("Supprimer ?")) await db.collection('skills').doc(id).delete(); };
+            const moveSkill = async (skillId, direction, localList) => {
+                const index = localList.findIndex(s => s.id === skillId);
+                if (index === -1 || (direction === -1 && index === 0) || (direction === 1 && index === localList.length - 1)) return;
+                const s1 = localList[index]; const s2 = localList[index + direction];
+                let o1 = s1.order || 0; let o2 = s2.order || 0;
+                if(o1 === o2) { o1 = index; o2 = index + direction; }
+                await db.collection('skills').doc(s1.id).update({ order: o2 });
+                await db.collection('skills').doc(s2.id).update({ order: o1 });
+            };
+
+            // Projets (Modifié pour le PDF)
+            const handleAddProject = async (e) => { 
+                e.preventDefault(); 
+                if (!newProject.title) return; 
+
+                setIsUploading(true);
+                let pdfUrl = "";
+
+                // 1. Si un fichier PDF est sélectionné, on l'envoie d'abord
+                if (pdfFile) {
+                    try {
+                        // On crée un nom unique pour éviter d'écraser les fichiers (Timestamp + Nom)
+                        const storageRef = storage.ref(`projets/${Date.now()}_${pdfFile.name}`);
+                        await storageRef.put(pdfFile);
+                        // On récupère le lien public
+                        pdfUrl = await storageRef.getDownloadURL();
+                    } catch (error) {
+                        console.error("Erreur upload:", error);
+                        alert("Erreur lors de l'envoi du fichier. Vérifiez que Storage est activé sur la console Firebase.");
+                        setIsUploading(false);
+                        return; // On arrête tout si l'upload échoue
+                    }
+                }
+
+                // 2. On enregistre le projet avec le lien du PDF
+                await db.collection('projects').add({ 
+                    ...newProject, 
+                    pdfUrl: pdfUrl,
+                    createdAt: Date.now() 
+                }); 
+                
+                // Reset du formulaire
+                setNewProject({ title: '', description: '', tech: '', link: '' }); 
+                setPdfFile(null);
+                setIsUploading(false);
+            };
+            const handleDeleteProject = async (id) => { if(confirm("Supprimer ?")) await db.collection('projects').doc(id).delete(); };
+
+
+            // Helpers
+            const getSkillsByCatId = (catId) => skills.filter(s => s.categoryId === catId || (!catId && !s.categoryId)).sort((a,b) => (a.order || 0) - (b.order || 0));
+            const orphanSkills = skills.filter(s => !categories.find(c => c.id === s.categoryId));
+
+            // Helper pour affichage des tags
+            const TechTags = ({ techString, className = "" }) => {
+                if(!techString) return null;
+                const tags = techString.split(',').map(t => t.trim()).filter(t => t);
+                return (
+                    <div className={`flex flex-wrap gap-2 ${className}`}>
+                        {tags.map((t, i) => (
+                            <span key={i} className="text-xs bg-teal-500/10 text-teal-400 px-2 py-1 rounded border border-teal-500/30 flex items-center gap-1">
+                                <span className="w-1 h-1 rounded-full bg-teal-500"></span> {t}
+                            </span>
+                        ))}
+                    </div>
+                );
+            };
+
+            return (
+                <div className="min-h-screen bg-slate-900 text-slate-200 font-sans pb-20">
+                    <nav className="sticky top-0 z-50 bg-slate-900/90 backdrop-blur-md border-b border-slate-800">
+                        <div className="max-w-5xl mx-auto px-4">
+                            <div className="flex items-center justify-between h-16">
+                                <div className="font-bold text-2xl text-teal-400">Portfolio<span className="text-white">Data.</span></div>
+                                <div className="flex space-x-2">
+                                    {['about', 'skills', 'projects'].map((tab) => (
+                                        <button key={tab} onClick={() => setActiveTab(tab)}
+                                            className={`px-3 py-2 rounded-md text-sm font-medium transition-all ${activeTab === tab ? 'text-teal-400 bg-teal-500/10' : 'text-slate-400 hover:text-white'}`}>
+                                            {tab === 'about' ? 'À propos' : tab === 'skills' ? 'Compétences' : 'Projets'}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    </nav>
+
+                    <main className="max-w-5xl mx-auto px-4 py-12">
+                        {/* À PROPOS */}
+                        {activeTab === 'about' && (
+                            <div className="animate-fade-in flex flex-col md:flex-row items-center gap-8">
+                                <div className="w-32 h-32 rounded-full bg-slate-800 flex items-center justify-center border-2 border-teal-500 shadow-[0_0_20px_rgba(20,184,166,0.3)]">
+                                    <Icon name="User" size={48} className="text-teal-400" />
+                                </div>
+                                <div className="text-center md:text-left">
+                                    <h1 className="text-4xl font-bold text-white mb-4">Étudiant Science des Données</h1>
+                                    <p className="text-slate-400 max-w-xl text-lg leading-relaxed">
+                                        Actuellement en 2ème année de BUT SD. J'analyse, modélise et valorise les données pour aider à la prise de décision.
+                                    </p>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* COMPÉTENCES */}
+                        {activeTab === 'skills' && (
+                            <div className="animate-fade-in">
+                                <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-2"><Icon name="Database" /> Mes Compétences</h2>
+                                
+                                {isAdmin && (
+                                    <div className="space-y-6 mb-12">
+                                        <div className="bg-slate-800/80 p-4 rounded border border-blue-500/30">
+                                            <h3 className="text-blue-400 font-bold mb-3 text-sm uppercase">1. Créer une Catégorie</h3>
+                                            <form onSubmit={handleAddCategory} className="flex gap-2">
+                                                <input className="bg-slate-900 px-3 py-2 rounded text-white border border-slate-700 flex-1" placeholder="Nouvelle catégorie (ex: Cloud Computing)" value={newCategory} onChange={e => setNewCategory(e.target.value)} />
+                                                <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 rounded font-bold">+</button>
+                                            </form>
+                                        </div>
+                                        <div className="bg-slate-800/80 p-4 rounded border border-teal-500/30">
+                                            <h3 className="text-teal-400 font-bold mb-3 text-sm uppercase">2. Ajouter une Compétence</h3>
+                                            <form onSubmit={handleAddSkill} className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                <select className="bg-slate-900 p-2 rounded text-white border border-slate-700" value={newSkill.categoryId} onChange={e => setNewSkill({...newSkill, categoryId: e.target.value})}>
+                                                    {categories.length === 0 && <option value="">Créez une catégorie d'abord</option>}
+                                                    {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                                </select>
+                                                <input className="bg-slate-900 p-2 rounded text-white border border-slate-700" placeholder="Nom (ex: Python)" value={newSkill.name} onChange={e => setNewSkill({...newSkill, name: e.target.value})} />
+                                                <input className="bg-slate-900 p-2 rounded text-white border border-slate-700 md:col-span-2" placeholder="Sous-catégories / Librairies (ex: Pandas, NumPy)" value={newSkill.libraries} onChange={e => setNewSkill({...newSkill, libraries: e.target.value})} />
+                                                <select className="bg-slate-900 p-2 rounded text-white border border-slate-700" value={newSkill.level} onChange={e => setNewSkill({...newSkill, level: e.target.value})}>
+                                                    <option>Débutant</option><option>Intermédiaire</option><option>Avancé</option><option>Expert</option>
+                                                </select>
+                                                <button type="submit" className="bg-teal-500 hover:bg-teal-600 text-white px-4 py-2 rounded font-bold">Ajouter</button>
+                                            </form>
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+                                    {categories.map((cat, catIndex) => {
+                                        const catSkills = getSkillsByCatId(cat.id);
+                                        return (
+                                            <div key={cat.id} className="bg-slate-800/50 rounded-xl border border-slate-700 overflow-hidden">
+                                                <div className="bg-slate-800 px-4 py-3 border-b border-slate-700 flex items-center justify-between group">
+                                                    <div className="flex items-center gap-2">
+                                                        <h3 className="font-bold text-teal-400 text-lg">{cat.name}</h3>
+                                                        <span className="text-xs text-slate-500 bg-slate-900 px-2 py-0.5 rounded-full">{catSkills.length}</span>
+                                                    </div>
+                                                    {isAdmin && (
+                                                        <div className="flex gap-1 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
+                                                            <button onClick={() => moveCategory(catIndex, -1)} className="p-1 hover:bg-slate-700 rounded text-slate-400 hover:text-white" title="Monter"><Icon name="ChevronUp" size={16}/></button>
+                                                            <button onClick={() => moveCategory(catIndex, 1)} className="p-1 hover:bg-slate-700 rounded text-slate-400 hover:text-white" title="Descendre"><Icon name="ChevronDown" size={16}/></button>
+                                                            <button onClick={() => handleDeleteCategory(cat.id)} className="p-1 hover:bg-red-900/50 rounded text-slate-400 hover:text-red-400 ml-2"><Icon name="Trash2" size={16}/></button>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <div className="p-4 space-y-4">
+                                                    {catSkills.length === 0 && <p className="text-xs text-slate-600 italic">Vide...</p>}
+                                                    {catSkills.map((s) => (
+                                                        <div key={s.id} className="relative group bg-slate-900/80 p-3 rounded border border-slate-800 hover:border-teal-500/30 transition-all">
+                                                            <div className="flex justify-between items-start mb-2">
+                                                                <div>
+                                                                    <span className="font-bold text-slate-100 text-lg block">{s.name}</span>
+                                                                    <span className={`text-[10px] uppercase tracking-wider font-bold ${s.level === 'Expert' ? 'text-purple-400' : s.level === 'Avancé' ? 'text-teal-400' : s.level === 'Intermédiaire' ? 'text-blue-400' : 'text-slate-500'}`}>{s.level}</span>
+                                                                </div>
+                                                                {isAdmin && (
+                                                                    <div className="flex gap-1">
+                                                                        <div className="flex flex-col mr-2">
+                                                                            <button onClick={() => moveSkill(s.id, -1, catSkills)} className="text-slate-600 hover:text-white"><Icon name="ChevronUp" size={14}/></button>
+                                                                            <button onClick={() => moveSkill(s.id, 1, catSkills)} className="text-slate-600 hover:text-white"><Icon name="ChevronDown" size={14}/></button>
+                                                                        </div>
+                                                                        <button onClick={() => handleDeleteSkill(s.id)} className="text-slate-600 hover:text-red-400"><Icon name="Trash2" size={16} /></button>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                            <TechTags techString={s.libraries ? s.libraries.join(',') : ''} className="mt-2 pt-2 border-t border-slate-800" />
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                                {isAdmin && orphanSkills.length > 0 && (
+                                    <div className="mt-8 p-4 border border-red-500/30 rounded bg-red-900/10">
+                                        <h3 className="text-red-400 font-bold mb-2">⚠️ Compétences non classées</h3>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            {orphanSkills.map(s => (<div key={s.id} className="bg-slate-800 p-2 rounded flex justify-between"><span>{s.name}</span><button onClick={() => handleDeleteSkill(s.id)}><Icon name="Trash2" size={14} className="text-red-400"/></button></div>))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* PROJETS */}
+                        {activeTab === 'projects' && (
+                            <div className="animate-fade-in">
+                                <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-2"><Icon name="Briefcase" /> Projets Réalisés</h2>
+                                
+                                {isAdmin && (
+                                    <form onSubmit={handleAddProject} className="mb-8 p-6 bg-slate-800 rounded-xl border border-teal-500/30 grid gap-4">
+                                        <h3 className="text-teal-400 font-bold mb-2 uppercase text-sm">Nouveau Projet</h3>
+                                        <input className="bg-slate-900 p-3 rounded-lg text-white border border-slate-700 focus:border-teal-500 outline-none" placeholder="Titre (ex: Dashboard Qualité de l'Air)" value={newProject.title} onChange={e => setNewProject({...newProject, title: e.target.value})} />
+                                        <textarea className="bg-slate-900 p-3 rounded-lg text-white border border-slate-700 focus:border-teal-500 outline-none h-24" placeholder="Description du projet et contexte..." value={newProject.description} onChange={e => setNewProject({...newProject, description: e.target.value})} />
+                                        
+                                        <div>
+                                            <label className="text-xs text-slate-400 mb-1 block">Technologies utilisées :</label>
+                                            <input className="w-full bg-slate-900 p-3 rounded-lg text-white border border-slate-700 focus:border-teal-500 outline-none" placeholder="ex: Python, Pandas, Scikit-learn, PowerBI" value={newProject.tech} onChange={e => setNewProject({...newProject, tech: e.target.value})} />
+                                            {newProject.tech && <div className="mt-2"><TechTags techString={newProject.tech} /></div>}
+                                        </div>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="text-xs text-slate-400 mb-1 block">Lien Externe (GitHub/Web) :</label>
+                                                <input className="w-full bg-slate-900 p-3 rounded-lg text-white border border-slate-700 focus:border-teal-500 outline-none" placeholder="https://..." value={newProject.link} onChange={e => setNewProject({...newProject, link: e.target.value})} />
+                                            </div>
+                                            <div>
+                                                <label className="text-xs text-slate-400 mb-1 block">Rapport PDF (Optionnel) :</label>
+                                                <input type="file" accept="application/pdf" onChange={(e) => setPdfFile(e.target.files[0])} className="w-full text-sm text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-teal-500/10 file:text-teal-400 hover:file:bg-teal-500/20" />
+                                            </div>
+                                        </div>
+
+                                        <button disabled={isUploading} type="submit" className={`bg-teal-500 hover:bg-teal-600 px-6 py-3 rounded-lg text-white font-bold transition-colors ${isUploading ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                                            {isUploading ? 'Envoi du fichier en cours...' : 'Ajouter ce Projet'}
+                                        </button>
+                                    </form>
+                                )}
+
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                                    {projects.map(p => (
+                                        <div key={p.id} className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden hover:border-teal-500/50 hover:shadow-xl hover:shadow-teal-900/10 transition-all flex flex-col group">
+                                            <div className="h-2 bg-gradient-to-r from-teal-500 to-blue-600"></div>
+                                            <div className="p-6 flex-1 flex flex-col relative">
+                                                {isAdmin && <button onClick={() => handleDeleteProject(p.id)} className="absolute top-4 right-4 text-slate-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"><Icon name="Trash2" size={18} /></button>}
+                                                
+                                                <h3 className="text-2xl font-bold text-white mb-3">{p.title}</h3>
+                                                <p className="text-slate-400 mb-6 flex-1 leading-relaxed">{p.description}</p>
+                                                
+                                                {/* Technologies */}
+                                                <div className="bg-slate-900/50 rounded-lg p-3 border border-slate-700/50 mb-4">
+                                                    <div className="flex items-center gap-2 mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                                                        <Icon name="Code" size={14} /> Technologies
+                                                    </div>
+                                                    <TechTags techString={p.tech} />
+                                                </div>
+
+                                                <div className="flex flex-wrap gap-4 mt-auto">
+                                                    {p.link && (
+                                                        <a href={p.link} target="_blank" className="inline-flex items-center gap-2 text-sm font-medium text-teal-400 hover:text-teal-300 transition-colors">
+                                                            <Icon name="ExternalLink" size={16}/> Voir le site / Code
+                                                        </a>
+                                                    )}
+                                                    {p.pdfUrl && (
+                                                        <a href={p.pdfUrl} target="_blank" className="inline-flex items-center gap-2 text-sm font-medium text-red-400 hover:text-red-300 transition-colors">
+                                                            <Icon name="FileText" size={16}/> Télécharger le Rapport
+                                                        </a>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </main>
+
+                    <footer className="fixed bottom-0 w-full bg-slate-900 border-t border-slate-800 p-4 flex justify-between text-slate-500 text-sm z-50">
+                        <span>© 2024 Portfolio Data</span>
+                        <button onClick={() => isAdmin ? handleLogout() : setShowLogin(!showLogin)}>
+                            {isAdmin ? <span className="text-teal-400 flex gap-2 items-center"><Icon name="Unlock" size={16} /> Admin (Déconnexion)</span> : <Icon name="Lock" size={16} />}
+                        </button>
+                    </footer>
+
+                    {showLogin && !isAdmin && (
+                        <div className="fixed bottom-12 right-4 bg-slate-800 p-4 rounded-xl shadow-2xl border border-slate-700 z-50 animate-fade-in">
+                             <div className="flex justify-between items-center mb-4"><span className="text-xs font-bold text-white uppercase tracking-wider">Accès Admin</span><button onClick={() => setShowLogin(false)}><Icon name="X" size={14} /></button></div>
+                             <form onSubmit={handleLogin} className="flex gap-2">
+                                <input type="password" placeholder="Mot de passe" value={passwordInput} onChange={e => setPasswordInput(e.target.value)} className="bg-slate-900 text-white p-2 rounded-lg border border-slate-600 focus:border-teal-500 outline-none w-48" />
+                                <button disabled={isLoggingIn} className="bg-teal-500 hover:bg-teal-600 text-white font-bold px-4 rounded-lg transition-colors">{isLoggingIn ? '...' : 'OK'}</button>
+                             </form>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
